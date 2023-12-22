@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from bot import views
 
 urlpatterns = [
+    path('', views.redirect_to_bot),
     path('adminka/', admin.site.urls),
 ]
