@@ -1,7 +1,8 @@
 from django.db import models
 import datetime
 
-class CourseCategories(models.Model):
+
+class Category(models.Model):
     class Meta:
         verbose_name = "категории"
         verbose_name_plural = "категории"
@@ -12,7 +13,7 @@ class CourseCategories(models.Model):
         return self.name
 
 
-class Courses(models.Model):
+class Course(models.Model):
     class Meta:
         verbose_name = "курс"
         verbose_name_plural = "курсы"
@@ -22,11 +23,9 @@ class Courses(models.Model):
     image = models.ImageField(verbose_name='Изображение', upload_to='images/', null=True, blank=True)
     course_url = models.URLField(max_length=120, verbose_name='Ссылка', default='')
     category = models.ForeignKey(
-        CourseCategories,
+        Category,
         verbose_name='Категория',
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
     )
     price = models.IntegerField(verbose_name='Цена в ₽', default=0)
     tags = models.CharField(max_length=120, verbose_name='Теги', default='', null=True, blank=True)
