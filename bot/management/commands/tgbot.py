@@ -1,14 +1,23 @@
 from django.conf import settings
-from django.db.models import Q
+from aiogram import Bot, Dispatcher
+from aiogram.filters import Command, CommandObject
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.enums import ParseMode
+from aiogram.types import Message, InlineKeyboardButton, FSInputFile, CallbackQuery
+import asyncio
+import logging
 
-import telebot
+from bot.models import Course
+from ._texts import START_TEXT
+from ._db_queries import get_all_categories, get_courses_by_category_id, search_courses
 
-from bot.models import Category, Course
-from .consts import START_TEXT
+logging.basicConfig(level=logging.INFO)
 
-bot = telebot.TeleBot(settings.TELEGRAM_TOKEN, parse_mode='markdown')
+bot = Bot(token=settings.TELEGRAM_TOKEN, parse_mode=ParseMode.MARKDOWN)
+dp = Dispatcher()
 
-def send_course(course, chat_id):
+
+async def send_course(course: Course, message: Message):
     newline = '\n\n'
     text = f'*{course.name}*{newline}' \
            f'{course.description + newline if course.description else ""}' \
@@ -16,66 +25,66 @@ def send_course(course, chat_id):
            f'Подробнее: {course.course_url}'
 
     if course.image:
-        bot.send_photo(chat_id, course.image, caption=text)
+        print(f'TEST: {course.image.name}')
+        await message.answer_photo(FSInputFile(course.image.name), caption=text)
     else:
-        bot.send_message(chat_id, text, disable_web_page_preview=True)
+        await message.answer(text, disable_web_page_preview=True)
 
 
-@bot.message_handler(commands=['start'])
-def handle_start(message):
-    bot.send_message(message.from_user.id, START_TEXT)
+@dp.message(Command('start'))
+async def handle_start(message: Message):
+    await message.answer(START_TEXT)
 
 
-@bot.message_handler(commands=['categories'])
-def handle_category(message):
-    categories = Category.objects.all()
-    keyboard = telebot.types.InlineKeyboardMarkup()
+@dp.message(Command('categories'))
+async def handle_category(message: Message):
+    categories = await get_all_categories()
+    builder = InlineKeyboardBuilder()
 
     for category in categories:
-        category_button = telebot.types.InlineKeyboardButton(text=category.name, callback_data=category.id)
-        keyboard.add(category_button)
+        category_button = InlineKeyboardButton(text=category.name, callback_data=str(category.id))
+        builder.row(category_button)
 
-    bot.send_message(message.chat.id, 'Выберите категорию:', reply_markup=keyboard)
-
-
-@bot.message_handler(commands=['search'])
-def handle_search(message):
-    keywords = ' '.join(message.text.split()[1:])
-
-    if not keywords:
-        bot.reply_to(message, 'Пожалуйста, укажите ключевые слова для поиска. '
-                              'Например: /search программирование')
-        return
-
-    courses = Course.objects.filter(
-        Q(name__icontains=keywords)
-        | Q(description__icontains=keywords)
-        | Q(tags__icontains=keywords)
+    await message.answer(
+        'Выберите категорию:',
+        reply_markup=builder.as_markup()
     )
 
+
+@dp.message(Command('search'))
+async def handle_search(message: Message, command: CommandObject):
+    if command.args is None:
+        await message.reply('Пожалуйста, укажите ключевые слова для поиска. Например: /search программирование')
+        return
+
+    courses = await search_courses(command.args)
+
     if not courses:
-        bot.reply_to(message, 'Ничего не найдено :(')
+        await message.reply('Ничего не найдено :(')
         return
 
     for course in courses:
-        send_course(course, message.chat.id)
+        await send_course(course, message)
 
 
-@bot.message_handler()
-def handle_unknown(message):
-    bot.reply_to(message, 'Я не знаю такую команду. Напишите /start.')
+@dp.message()
+async def handle_unknown(message: Message):
+    await message.reply('Я не знаю такую команду. Напишите /start')
 
 
-@bot.callback_query_handler(func=lambda call: True)
-def handle_buttons_click(call):
-    courses = Course.objects.filter(category_id=call.data)
+@dp.callback_query()
+async def handle_buttons_click(callback: CallbackQuery):
+    courses = await get_courses_by_category_id(callback.data)
 
     if not courses:
-        bot.send_message(call.message.chat.id, 'В этой категориии пока нет курсов :(')
+        await callback.message.answer('В этой категориии пока нет курсов :(')
         return
 
     for course in courses:
-        send_course(course, call.message.chat.id)
+        await send_course(course, callback.message)
 
 
-bot.polling(none_stop=True, interval=0)
+async def main():
+    await dp.start_polling(bot)
+
+asyncio.run(main())

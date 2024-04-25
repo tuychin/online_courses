@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 django = "*"
-pytelegrambotapi = "*"
+aiogram = "*"
 pillow = "*"
 
 [dev-packages]
