@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 
 from django.conf import settings
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -14,9 +16,11 @@ from ._texts import START_TEXT, COURSE_TEXT, CATEGORIES_TEXT, COURSES_EMPTY_TEXT
     SUCCESSFUL_PAYMENT_TEXT
 from ._db_queries import get_all_categories, get_courses_by_category_id, search_courses, get_course_by_id
 
+load_dotenv()
+
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=settings.TELEGRAM_TOKEN, parse_mode=ParseMode.MARKDOWN)
+bot = Bot(token=os.getenv("TELEGRAM_TOKEN"), parse_mode=ParseMode.MARKDOWN)
 dp = Dispatcher()
 
 
@@ -66,7 +70,7 @@ async def course_button_handler(callback: CallbackQuery):
     await callback.message.reply_invoice(
         title=course.name,
         description=INVOICE_DESCRIPTION_TEXT.format(name=course.name, price=course.price),
-        provider_token=settings.PAYMENTS_TOKEN,
+        provider_token=os.getenv("PAYMENTS_TOKEN"),
         currency="rub",
         is_flexible=False,
         prices=[get_price(price=course.price, product_name=course.name)],
