@@ -21,3 +21,7 @@ def search_courses(text: str):
         | Q(tags__icontains=text)
     ))
 
+
+@sync_to_async
+def get_course_by_id(course_id: str):
+    return Course.objects.get(pk=course_id)
