@@ -1,14 +1,16 @@
+import asyncio
+import logging
+
 from django.conf import settings
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.enums import ParseMode
 from aiogram.types import Message, InlineKeyboardButton, FSInputFile, CallbackQuery
-import asyncio
-import logging
 
 from bot.models import Course
-from ._texts import START_TEXT
+from ._texts import START_TEXT, COURSE_TEXT, CATEGORIES_TEXT, COURSES_EMPTY_TEXT,\
+    SEARCH_NOT_FIND_TEXT, SEARCH_WITHOUT_ARGS_TEXT, UNKNOWN_COMMAND_TEXT
 from ._db_queries import get_all_categories, get_courses_by_category_id, search_courses
 
 logging.basicConfig(level=logging.INFO)
@@ -18,14 +20,10 @@ dp = Dispatcher()
 
 
 async def send_course(course: Course, message: Message):
-    newline = '\n\n'
-    text = f'*{course.name}*{newline}' \
-           f'{course.description + newline if course.description else ""}' \
-           f'Цена: {course.price} ₽{newline}' \
-           f'Подробнее: {course.course_url}'
+    description = f'\n{course.description}\n' if course.description else ""
+    text = COURSE_TEXT.format(name=course.name, description=description, price=course.price, url=course.course_url)
 
     if course.image:
-        print(f'TEST: {course.image.name}')
         await message.answer_photo(FSInputFile(course.image.name), caption=text)
     else:
         await message.answer(text, disable_web_page_preview=True)
@@ -46,7 +44,7 @@ async def handle_category(message: Message):
         builder.row(category_button)
 
     await message.answer(
-        'Выберите категорию:',
+        CATEGORIES_TEXT,
         reply_markup=builder.as_markup()
     )
 
@@ -54,13 +52,13 @@ async def handle_category(message: Message):
 @dp.message(Command('search'))
 async def handle_search(message: Message, command: CommandObject):
     if command.args is None:
-        await message.reply('Пожалуйста, укажите ключевые слова для поиска. Например: /search программирование')
+        await message.reply(SEARCH_WITHOUT_ARGS_TEXT)
         return
 
     courses = await search_courses(command.args)
 
     if not courses:
-        await message.reply('Ничего не найдено :(')
+        await message.reply(SEARCH_NOT_FIND_TEXT)
         return
 
     for course in courses:
@@ -69,7 +67,7 @@ async def handle_search(message: Message, command: CommandObject):
 
 @dp.message()
 async def handle_unknown(message: Message):
-    await message.reply('Я не знаю такую команду. Напишите /start')
+    await message.reply(UNKNOWN_COMMAND_TEXT)
 
 
 @dp.callback_query()
@@ -77,7 +75,7 @@ async def handle_buttons_click(callback: CallbackQuery):
     courses = await get_courses_by_category_id(callback.data)
 
     if not courses:
-        await callback.message.answer('В этой категориии пока нет курсов :(')
+        await callback.message.answer(COURSES_EMPTY_TEXT)
         return
 
     for course in courses:
