@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 
-from django.conf import settings
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandObject
@@ -13,8 +12,9 @@ from aiogram.types import Message, InlineKeyboardButton, FSInputFile, CallbackQu
 from bot.models import Course
 from ._texts import START_TEXT, COURSE_TEXT, CATEGORIES_TEXT, COURSES_EMPTY_TEXT, SEARCH_NOT_FIND_TEXT,\
     SEARCH_WITHOUT_ARGS_TEXT, UNKNOWN_COMMAND_TEXT, PAYMENT_BUTTON_TEXT, INVOICE_DESCRIPTION_TEXT,\
-    SUCCESSFUL_PAYMENT_TEXT
-from ._db_queries import get_all_categories, get_courses_by_category_id, search_courses, get_course_by_id
+    SUCCESSFUL_PAYMENT_TEXT, MY_PURCHASES_TEXT, MY_PURCHASES_EMPTY_TEXT, PURCHASE_ITEM_TEXT
+from ._db_queries import get_all_categories, get_courses_by_category_id, search_courses,\
+    get_course_by_id, add_purchase, get_user_purchases
 
 load_dotenv()
 
@@ -114,6 +114,31 @@ async def command_search_handler(message: Message, command: CommandObject):
         await send_course(course, message)
 
 
+@dp.message(Command("purchases"))
+async def command_purchases_handler(message: Message):
+    user = await bot.get_me()
+    purchases = await get_user_purchases(user_login=user.username)
+    purchase_text_list: list[str] = []
+
+    if not purchases:
+        await message.reply(MY_PURCHASES_EMPTY_TEXT)
+        return
+
+    for purchase in purchases:
+        purchase_text = PURCHASE_ITEM_TEXT.format(
+            name=purchase.product_name,
+            product_url=purchase.product_url,
+            paid=purchase.product_paid,
+            currency=purchase.currency
+        )
+        purchase_text_list.append(purchase_text)
+
+    await message.answer(
+        MY_PURCHASES_TEXT.format(purchases="\n\n".join(purchase_text_list)),
+        disable_web_page_preview=True
+    )
+
+
 @dp.callback_query()
 async def buttons_click_handler(callback: CallbackQuery):
     handler_type = callback.data.split("_")[0]
@@ -132,11 +157,21 @@ async def pre_checkout_query_handler(pre_checkout_q: PreCheckoutQuery):
 
 @dp.message(F.successful_payment)
 async def successful_payment_handler(message: Message):
+    user = await bot.get_me()
     payment_info = message.successful_payment
     total_amount = payment_info.total_amount // 100
     currency = payment_info.currency
     course_id = payment_info.invoice_payload.split("_")[1]
     course: Course = await get_course_by_id(course_id)
+
+    await add_purchase(
+        user_login=user.username,
+        product_id=course.id,
+        product_name=course.name,
+        product_url=course.product_url,
+        product_paid=total_amount,
+        currency=currency,
+    )
 
     await message.answer(SUCCESSFUL_PAYMENT_TEXT.format(
         total_amount=total_amount,
